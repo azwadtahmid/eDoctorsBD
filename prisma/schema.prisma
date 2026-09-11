@@ -1,0 +1,274 @@
+// Prisma schema for eDoctorsBD demo platform (v2 — full feature build)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  PATIENT
+  DOCTOR
+  ADMIN
+}
+
+enum AppointmentStatus {
+  PENDING_PAYMENT        // created, awaiting payment
+  PENDING_DOCTOR_REVIEW  // paid; doctor reviewing intake answers
+  BOOKED                 // doctor accepted
+  RESCHEDULE_PROPOSED    // doctor proposed a different slot; awaiting patient
+  REJECTED               // doctor declined (refund due)
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum Urgency {
+  NORMAL
+  URGENT
+}
+
+enum PaymentStatus {
+  INITIATED
+  PAID
+  FAILED
+  REFUND_PENDING
+  REFUNDED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  phone        String?
+  role         Role     @default(PATIENT)
+  createdAt    DateTime @default(now())
+
+  doctorProfile   DoctorProfile?
+  patientProfiles PatientProfile[]  // self + family members
+  appointments    Appointment[]     @relation("PatientAppointments")
+  reviews         Review[]
+  favorites       Favorite[]
+}
+
+/// A person an appointment can be booked FOR: the account holder themselves,
+/// or a family member (child, parent, spouse...). Every account gets a "self"
+/// profile automatically on registration.
+model PatientProfile {
+  id           String   @id @default(cuid())
+  accountId    String
+  account      User     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  name         String
+  relationship String   @default("Self") // Self, Child, Parent, Spouse, Sibling, Other
+  dateOfBirth  DateTime?
+  gender       Gender?
+  isSelf       Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  appointments Appointment[]
+
+  @@index([accountId])
+}
+
+model Hospital {
+  id        String   @id @default(cuid())
+  name      String
+  address   String
+  city      String
+  latitude  Float
+  longitude Float
+  doctors   DoctorProfile[]
+}
+
+model DoctorProfile {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bmdcNumber     String   @unique
+  specialization String
+  bio            String?
+  experienceYrs  Int      @default(0)
+  feeBdt         Int
+  hospitalId     String?
+  hospital       Hospital? @relation(fields: [hospitalId], references: [id])
+  latitude       Float
+  longitude      Float
+  gender         Gender?
+  languages      String[] @default(["Bengali", "English"])
+
+  verificationStatus VerificationStatus @default(PENDING)
+  verifiedAt         DateTime?
+  rejectionReason    String?
+
+  avgRating   Float @default(0)
+  reviewCount Int   @default(0)
+
+  slots        Slot[]
+  templates    AvailabilityTemplate[]
+  appointments Appointment[] @relation("DoctorAppointments")
+  reviews      Review[]
+  reviewReplies ReviewReply[]
+  favoritedBy  Favorite[]
+
+  @@index([specialization])
+  @@index([feeBdt])
+  @@index([verificationStatus])
+}
+
+/// Recurring weekly availability, e.g. "every Tuesday 10:00-13:00, 20 min slots".
+/// The doctor clicks "generate" to turn a template into concrete Slot rows.
+model AvailabilityTemplate {
+  id               String        @id @default(cuid())
+  doctorId         String
+  doctor           DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  dayOfWeek        Int           // 0 = Sunday ... 6 = Saturday
+  startTime        String        // "10:00"
+  endTime          String        // "13:00"
+  slotDurationMins Int           @default(20)
+  active           Boolean       @default(true)
+
+  @@index([doctorId])
+}
+
+model Slot {
+  id        String        @id @default(cuid())
+  doctorId  String
+  doctor    DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  startTime DateTime
+  endTime   DateTime
+  isBooked  Boolean       @default(false)
+
+  appointment          Appointment? @relation("SlotAppointment")
+  proposedFor          Appointment? @relation("ProposedSlot")
+
+  @@unique([doctorId, startTime])
+}
+
+model Appointment {
+  id        String @id @default(cuid())
+  patientId String
+  patient   User   @relation("PatientAppointments", fields: [patientId], references: [id])
+
+  /// Who the appointment is actually FOR (self or a family member)
+  patientProfileId String?
+  patientProfile   PatientProfile? @relation(fields: [patientProfileId], references: [id])
+
+  doctorId String
+  doctor   DoctorProfile @relation("DoctorAppointments", fields: [doctorId], references: [id])
+
+  slotId String @unique
+  slot   Slot   @relation("SlotAppointment", fields: [slotId], references: [id])
+
+  /// When a doctor proposes a new time, the candidate slot is held here until
+  /// the patient accepts or declines.
+  proposedSlotId String? @unique
+  proposedSlot   Slot?   @relation("ProposedSlot", fields: [proposedSlotId], references: [id])
+
+  status  AppointmentStatus @default(PENDING_PAYMENT)
+  urgency Urgency           @default(NORMAL)
+  feeBdt  Int
+
+  /// Filled in by the doctor when completing the consultation
+  consultationNotes String?
+  prescription      String?
+
+  doctorDecisionAt DateTime?
+  decisionNote     String?   // rejection reason / reschedule reason
+  cancelledBy      Role?
+  cancelReason     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  intake  IntakeResponse?
+  payment Payment?
+  review  Review?
+
+  @@index([doctorId, status])
+  @@index([patientId])
+}
+
+/// The patient's answers to the pre-consultation questionnaire.
+/// Stored as JSON so the question set can evolve without a migration.
+/// This is information FOR THE DOCTOR — the system never interprets it
+/// or gives the patient any assessment.
+model IntakeResponse {
+  id            String      @id @default(cuid())
+  appointmentId String      @unique
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  specialization String
+  answers       Json        // [{ questionId, question, answer }]
+  /// Set when the patient's answers matched a safety-screening trigger
+  /// (e.g. emergency symptoms). Surfaces the appointment to the doctor first.
+  flaggedForReview Boolean  @default(false)
+  flagReason       String?
+  submittedAt   DateTime    @default(now())
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  appointmentId String        @unique
+  appointment   Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  tranId        String        @unique
+  amountBdt     Int
+  status        PaymentStatus @default(INITIATED)
+  gatewayResp   Json?
+  refundedAt    DateTime?
+  refundNote    String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Review {
+  id            String        @id @default(cuid())
+  appointmentId String        @unique
+  appointment   Appointment   @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patientId     String
+  patient       User          @relation(fields: [patientId], references: [id])
+  doctorId      String
+  doctor        DoctorProfile @relation(fields: [doctorId], references: [id])
+  rating        Int
+  comment       String?
+  createdAt     DateTime      @default(now())
+
+  reply ReviewReply?
+
+  @@index([doctorId])
+}
+
+model ReviewReply {
+  id        String        @id @default(cuid())
+  reviewId  String        @unique
+  review    Review        @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  doctorId  String
+  doctor    DoctorProfile @relation(fields: [doctorId], references: [id])
+  body      String
+  createdAt DateTime      @default(now())
+}
+
+model Favorite {
+  id        String        @id @default(cuid())
+  patientId String
+  patient   User          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctorId  String
+  doctor    DoctorProfile @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([patientId, doctorId])
+}
