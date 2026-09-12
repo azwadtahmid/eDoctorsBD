@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import DoctorCard, { DoctorSearchResult } from "@/components/DoctorCard";
 import { useLang } from "@/components/LanguageProvider";
@@ -11,7 +11,7 @@ const SPECIALIZATIONS = [
 ];
 const LANGUAGES = ["Bengali", "English", "Hindi", "Urdu", "Chittagonian", "Sylheti"];
 
-export default function DoctorsSearchPage() {
+function DoctorsSearchPageInner() {
   const searchParams = useSearchParams();
   const { t } = useLang();
 
@@ -196,5 +196,17 @@ export default function DoctorsSearchPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * useSearchParams() needs a Suspense boundary above it, otherwise Next.js
+ * cannot prerender this route at build time.
+ */
+export default function DoctorsSearchPage() {
+  return (
+    <Suspense fallback={<p className="text-gray-500">Loading doctors…</p>}>
+      <DoctorsSearchPageInner />
+    </Suspense>
   );
 }

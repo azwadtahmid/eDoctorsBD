@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useLang } from "@/components/LanguageProvider";
@@ -41,7 +41,7 @@ const STATUS_EXPLAIN: Record<string, string> = {
   CANCELLED: "This appointment was cancelled. Any payment made is being refunded.",
 };
 
-export default function PatientDashboard() {
+function PatientDashboardInner() {
   const searchParams = useSearchParams();
   const paymentFlag = searchParams.get("payment");
   const { t } = useLang();
@@ -336,5 +336,17 @@ export default function PatientDashboard() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * useSearchParams() needs a Suspense boundary above it, otherwise Next.js
+ * cannot prerender this route at build time.
+ */
+export default function PatientDashboard() {
+  return (
+    <Suspense fallback={<p className="text-gray-500">Loading your appointments…</p>}>
+      <PatientDashboardInner />
+    </Suspense>
   );
 }

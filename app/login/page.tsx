@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") || "/";
@@ -66,5 +66,17 @@ export default function LoginPage() {
         <p>admin@example.com — admin</p>
       </div>
     </div>
+  );
+}
+
+/**
+ * useSearchParams() needs a Suspense boundary above it, otherwise Next.js
+ * cannot prerender this route at build time.
+ */
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<p className="text-gray-500">Loading…</p>}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

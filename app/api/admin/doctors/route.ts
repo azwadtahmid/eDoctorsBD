@@ -31,14 +31,18 @@ export async function GET(req: NextRequest) {
     orderBy: { user: { createdAt: "desc" } },
   });
 
-  const counts: { verificationStatus: string; _count: number }[] =
-    await prisma.doctorProfile.groupBy({
-      by: ["verificationStatus"],
-      _count: true,
-    });
+  const counts = await prisma.doctorProfile.groupBy({
+    by: ["verificationStatus"],
+    _count: true,
+  });
 
   return NextResponse.json({
     doctors,
-    counts: Object.fromEntries(counts.map((c) => [c.verificationStatus, c._count])),
+    counts: Object.fromEntries(
+      counts.map((c: { verificationStatus: string; _count: number }) => [
+        c.verificationStatus,
+        c._count,
+      ])
+    ),
   });
 }
