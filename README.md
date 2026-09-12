@@ -22,21 +22,6 @@ routes to a human doctor, and three role-based dashboards.
 
 ---
 
-## Screenshots
-
-**Doctor reviewing a patient's intake answers before deciding**
-
-![Doctor intake review](SCREENSHOT_URL_1)
-
-**Search with filters**
-
-![Doctor search](SCREENSHOT_URL_2)
-
-**Patient dashboard**
-
-![Patient dashboard](SCREENSHOT_URL_3)
-
----
 
 ## The intake questionnaire (the distinctive feature)
 
