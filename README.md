@@ -1,5 +1,11 @@
 # eDoctorsBD (demo) — v2
 
+**Live demo: [edoctorsbd.vercel.app](https://edoctorsbd.vercel.app)**
+
+> **Demo only.** All doctors, credentials and BMDC registration numbers are
+> fictional. Payments run in bypass mode — no real money moves. Not a medical
+> service.
+
 A doctor-booking / telehealth platform for Bangladesh, built as a portfolio
 demo. Full-stack: auth, a relational data model, geo + multi-field search,
 a real (sandboxed) payment flow, a pre-consultation intake questionnaire that
@@ -13,6 +19,22 @@ routes to a human doctor, and three role-based dashboards.
 - SSLCommerz **sandbox** payments
 - Tailwind CSS
 - Bengali / English UI toggle
+
+---
+
+## Screenshots
+
+**Doctor reviewing a patient's intake answers before deciding**
+
+![Doctor intake review](SCREENSHOT_URL_1)
+
+**Search with filters**
+
+![Doctor search](SCREENSHOT_URL_2)
+
+**Patient dashboard**
+
+![Patient dashboard](SCREENSHOT_URL_3)
 
 ---
 
@@ -104,9 +126,14 @@ and hours change.
 2. **Get a free Postgres database** — [Neon](https://neon.tech) or
    [Supabase](https://supabase.com). Copy the connection string.
 
-3. **Get free SSLCommerz sandbox credentials** at
-   [developer.sslcommerz.com/registration](https://developer.sslcommerz.com/registration/).
-   Test account, free, no business documents needed.
+3. **Payments — optional.** The app runs in bypass mode by default in
+   development: payment is recorded locally and the appointment proceeds
+   straight to doctor review. To exercise the real gateway instead, get free
+   sandbox credentials at
+   [developer.sslcommerz.com/registration](https://developer.sslcommerz.com/registration/)
+   (test account, free, no business documents needed) and fill in
+   `SSLCOMMERZ_STORE_ID` / `SSLCOMMERZ_STORE_PASSWORD`. In production, bypass
+   must be opted into explicitly with `DEMO_ALLOW_PAYMENT_BYPASS="true"`.
 
 4. **Configure**
    ```bash
@@ -114,7 +141,7 @@ and hours change.
    cp .env.local .env
    ```
    Prisma's CLI reads `.env`; Next.js reads `.env.local`. Keep both.
-   Fill in `DATABASE_URL`, `NEXTAUTH_SECRET`, and the two SSLCommerz values.
+   Fill in `DATABASE_URL` and `NEXTAUTH_SECRET` at minimum.
 
 5. **Create tables and seed**
    ```bash
@@ -223,7 +250,7 @@ and released if they decline.
 | Piece | Status |
 |---|---|
 | Auth, schema, search, booking transactions, intake logic, all dashboards | **Real** — same code you would ship |
-| Payments | **Real SSLCommerz sandbox** — real API calls, redirect and IPN validation; no real money |
+| Payments | **Bypass by default** — payment is recorded locally, flagged in the payment record and shown as a banner in the UI. The SSLCommerz sandbox integration is real (redirect + IPN validation) and runs whenever credentials are supplied. No real money either way. |
 | Refunds | Recorded as `REFUND_PENDING` in the database. A production build would call the gateway's refund API here. |
 | Doctor verification | Real approval workflow; a human still has to check the BMDC number against the official register |
 | Doctor/hospital data | Hospitals are real places; **all doctors are fictional**, and the BMDC numbers are invented placeholders |
