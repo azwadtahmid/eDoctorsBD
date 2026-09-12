@@ -22,11 +22,14 @@ function sslcommerzConfigured() {
  * Normally starts a SSLCommerz SANDBOX checkout and returns the URL to
  * redirect the browser to.
  *
- * DEV BYPASS: if no sandbox credentials are configured AND we are not running
- * in production, the payment is recorded as paid locally and the appointment
- * moves straight to the doctor's review queue. This exists so the rest of the
- * app can be demoed without setting up a gateway account. It is hard-disabled
- * when NODE_ENV === "production" so it can never skip a real payment.
+ * PAYMENT BYPASS: if no sandbox credentials are configured, the payment is
+ * recorded as paid locally and the appointment moves straight to the doctor's
+ * review queue, so the rest of the app can be demoed without a gateway account.
+ *
+ * In development this happens automatically. In production it requires
+ * DEMO_ALLOW_PAYMENT_BYPASS="true" to be set explicitly — an opt-in, so a real
+ * deployment can never silently skip payment because someone forgot to
+ * configure the gateway. Every bypass is logged and tagged in the database.
  */
 export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -57,10 +60,17 @@ export async function POST(req: NextRequest) {
   const tranId = `APT-${appointment.id}-${Date.now()}`;
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
-  // ---- Dev bypass ----
+  // ---- Payment bypass ----
   const isProduction = process.env.NODE_ENV === "production";
+  const bypassOptedIn = process.env.DEMO_ALLOW_PAYMENT_BYPASS === "true";
+
   if (!sslcommerzConfigured()) {
-    if (isProduction) {
+    // In production the bypass must be explicitly switched on.
+    if (isProduction && !bypassOptedIn) {
+      console.error(
+        "[payment] Refusing to bypass payment: no SSLCommerz credentials are " +
+          "configured and DEMO_ALLOW_PAYMENT_BYPASS is not set to \"true\"."
+      );
       return NextResponse.json(
         { error: "Payment gateway is not configured." },
         { status: 500 }
@@ -68,9 +78,9 @@ export async function POST(req: NextRequest) {
     }
 
     console.warn(
-      "[payment] No SSLCommerz credentials found — using the DEV BYPASS. " +
-        "No real or sandbox payment was made. Set SSLCOMMERZ_STORE_ID and " +
-        "SSLCOMMERZ_STORE_PASSWORD in .env.local to exercise the real flow."
+      `[payment] PAYMENT BYPASS USED (${isProduction ? "production, opted in" : "development"}). ` +
+        "No real or sandbox transaction took place. Set SSLCOMMERZ_STORE_ID and " +
+        "SSLCOMMERZ_STORE_PASSWORD to exercise the real flow."
     );
 
     await prisma.$transaction(async (tx: any) => {
@@ -80,7 +90,7 @@ export async function POST(req: NextRequest) {
           tranId,
           amountBdt: appointment.feeBdt,
           status: "PAID",
-          refundNote: "DEV BYPASS — no gateway transaction took place",
+          refundNote: "DEMO BYPASS — no gateway transaction took place",
         },
       });
       await tx.appointment.update({
