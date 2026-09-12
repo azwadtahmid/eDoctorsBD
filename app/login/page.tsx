@@ -63,7 +63,7 @@ function LoginPageInner() {
         <p className="font-medium">Demo accounts (all password123):</p>
         <p>patient@example.com — patient</p>
         <p>doctor@example.com — doctor</p>
-        <p>admin@example.com — admin</p>
+        
       </div>
     </div>
   );
