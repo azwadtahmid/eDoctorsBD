@@ -9,7 +9,8 @@ import { rateLimit, RULES } from "@/lib/rate-limit";
  * The doctor marks a confirmed appointment as done and records what was
  * discussed. The patient can read these notes afterwards from their dashboard.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user || (session.user as any).role !== "DOCTOR") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "Doctor profile not found" }, { status: 404 });
   }
 
-  const appointment = await prisma.appointment.findUnique({ where: { id: params.id } });
+  const appointment = await prisma.appointment.findUnique({ where: { id } });
   if (!appointment || appointment.doctorId !== doctorProfile.id) {
     return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
   }
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const body = await req.json().catch(() => ({}));
 
   const updated = await prisma.appointment.update({
-    where: { id: params.id },
+    where: { id },
     data: {
       status: "COMPLETED",
       consultationNotes: body.consultationNotes ?? null,

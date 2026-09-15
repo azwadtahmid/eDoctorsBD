@@ -12,7 +12,8 @@ import { rateLimit, RULES } from "@/lib/rate-limit";
  * to that slot and is confirmed) or declines it (the appointment is cancelled
  * and the payment marked for refund).
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const limited = rateLimit("reschedule-response", (session.user as any).id, RULES.write);
   if (limited) return limited;
 
-  const appointment = await prisma.appointment.findUnique({ where: { id: params.id } });
+  const appointment = await prisma.appointment.findUnique({ where: { id } });
   if (!appointment || appointment.patientId !== (session.user as any).id) {
     return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
   }

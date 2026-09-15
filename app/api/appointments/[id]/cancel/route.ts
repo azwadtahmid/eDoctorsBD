@@ -10,7 +10,8 @@ import { rateLimit, RULES } from "@/lib/rate-limit";
  * Either the patient or the doctor can cancel an appointment that hasn't
  * happened yet. The slot is released and any payment marked for refund.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -23,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   const role = (session.user as any).role;
 
   const appointment = await prisma.appointment.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { doctor: true },
   });
   if (!appointment) {

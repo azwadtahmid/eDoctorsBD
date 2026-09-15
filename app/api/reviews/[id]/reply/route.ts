@@ -7,7 +7,8 @@ import { prisma } from "@/lib/prisma";
  * POST /api/reviews/:id/reply { body }
  * A doctor can publicly reply once to a review left on their own profile.
  */
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user || (session.user as any).role !== "DOCTOR") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!doctor) return NextResponse.json({ error: "Doctor not found" }, { status: 404 });
 
   const review = await prisma.review.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { reply: true },
   });
   if (!review || review.doctorId !== doctor.id) {

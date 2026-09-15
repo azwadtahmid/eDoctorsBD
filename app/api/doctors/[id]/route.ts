@@ -11,12 +11,13 @@ import { clientIp, rateLimit, RULES } from "@/lib/rate-limit";
  * contact-adjacent details — was readable by anyone who had the id. A rejected
  * applicant is not a public record.
  */
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const limited = rateLimit("doctor-detail", clientIp(req), RULES.read);
   if (limited) return limited;
 
   const doctor = await prisma.doctorProfile.findFirst({
-    where: { id: params.id, verificationStatus: "APPROVED" },
+    where: { id: id, verificationStatus: "APPROVED" },
     include: {
       user: { select: { name: true } },
       hospital: true,

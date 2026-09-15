@@ -30,7 +30,8 @@ const decisionSchema = z.discriminatedUnion("action", [
   }),
 ]);
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user || (session.user as any).role !== "DOCTOR") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -44,7 +45,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   });
   if (!doctor) return NextResponse.json({ error: "Doctor profile not found" }, { status: 404 });
 
-  const appointment = await prisma.appointment.findUnique({ where: { id: params.id } });
+  const appointment = await prisma.appointment.findUnique({ where: { id } });
   if (!appointment || appointment.doctorId !== doctor.id) {
     return NextResponse.json({ error: "Appointment not found" }, { status: 404 });
   }

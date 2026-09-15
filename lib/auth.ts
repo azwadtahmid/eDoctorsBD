@@ -76,19 +76,11 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   // Sessions expire rather than living forever; the JWT is refreshed while the
   // user is active.
-  jwt: { maxAge: 24 * 60 * 60 },
-  cookies: {
-    sessionToken: {
-      name:
-        process.env.NODE_ENV === "production"
-          ? "__Secure-next-auth.session-token"
-          : "next-auth.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-      },
-    },
-  },
+  //
+  // The session cookie is deliberately left to NextAuth's defaults: httpOnly,
+  // sameSite=lax, path=/, and the `__Secure-` prefix plus secure=true derived
+  // from the NEXTAUTH_URL scheme. Pinning those to NODE_ENV instead breaks the
+  // middleware, which resolves the cookie name from the scheme — the app would
+  // write `__Secure-next-auth.session-token` while the guard looked for the
+  // unprefixed name and redirected signed-in users to /login.
 };

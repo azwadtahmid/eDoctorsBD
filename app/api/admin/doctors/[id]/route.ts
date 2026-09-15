@@ -15,7 +15,8 @@ const decisionSchema = z.discriminatedUnion("action", [
  * Approve or reject a doctor's registration. Only APPROVED doctors appear in
  * patient search results.
  */
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const session = await getServerSession(authOptions);
   if (!session?.user || (session.user as any).role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -29,11 +30,11 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     return NextResponse.json({ error: "Invalid decision" }, { status: 400 });
   }
 
-  const doctor = await prisma.doctorProfile.findUnique({ where: { id: params.id } });
+  const doctor = await prisma.doctorProfile.findUnique({ where: { id } });
   if (!doctor) return NextResponse.json({ error: "Doctor not found" }, { status: 404 });
 
   const updated = await prisma.doctorProfile.update({
-    where: { id: params.id },
+    where: { id },
     data:
       parsed.data.action === "approve"
         ? {
