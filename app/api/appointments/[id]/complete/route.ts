@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 /**
  * POST /api/appointments/:id/complete { consultationNotes?, prescription? }
@@ -13,6 +14,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!session?.user || (session.user as any).role !== "DOCTOR") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const limited = rateLimit("appointment-complete", (session.user as any).id, RULES.write);
+  if (limited) return limited;
 
   const doctorProfile = await prisma.doctorProfile.findUnique({
     where: { userId: (session.user as any).id },

@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { clientIp, rateLimit, RULES } from "@/lib/rate-limit";
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const doctor = await prisma.doctorProfile.findUnique({
-    where: { id: params.id },
+/**
+ * GET /api/doctors/:id — the public profile page.
+ *
+ * Only APPROVED doctors are addressable. The listing endpoint already filters
+ * on verification status, but this one did not, so a pending or rejected
+ * doctor's full profile — including the BMDC number they registered and their
+ * contact-adjacent details — was readable by anyone who had the id. A rejected
+ * applicant is not a public record.
+ */
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  const limited = rateLimit("doctor-detail", clientIp(req), RULES.read);
+  if (limited) return limited;
+
+  const doctor = await prisma.doctorProfile.findFirst({
+    where: { id: params.id, verificationStatus: "APPROVED" },
     include: {
       user: { select: { name: true } },
       hospital: true,

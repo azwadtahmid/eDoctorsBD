@@ -2,9 +2,18 @@ import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "./prisma";
+import { consume, RULES } from "./rate-limit";
+
+/**
+ * A real bcrypt hash of a value nobody can supply, compared against when the
+ * email does not exist. Without it, "no such user" returns in ~0ms while a
+ * wrong password takes ~100ms, which is enough to enumerate who has an account
+ * on a medical platform.
+ */
+const DUMMY_HASH = "$2a$12$C6UzMDM.H6dfI/f/IKcEe.ZxZ5Vv3cNTe/tQmVZQWxvQkXGhLxKTS";
 
 export const authOptions: NextAuthOptions = {
-  session: { strategy: "jwt" },
+  session: { strategy: "jwt", maxAge: 24 * 60 * 60 },
   pages: {
     signIn: "/login",
   },
@@ -15,13 +24,26 @@ export const authOptions: NextAuthOptions = {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.email || !credentials?.password) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
-        });
-        if (!user) return null;
+        const email = credentials.email.trim().toLowerCase();
+
+        // Throttle credential stuffing. Limited per-IP and per-account: the
+        // per-account bucket matters because a botnet spreads across IPs.
+        const forwarded = (req?.headers?.["x-forwarded-for"] as string | undefined) ?? "";
+        const ip = forwarded.split(",")[0].trim() || "unknown";
+        if (!consume("login-ip", ip, RULES.login)) return null;
+        if (!consume("login-account", email, RULES.login)) return null;
+
+        const user = await prisma.user.findUnique({ where: { email } });
+
+        if (!user) {
+          // Burn comparable time so a missing account is indistinguishable
+          // from a wrong password.
+          await bcrypt.compare(credentials.password, DUMMY_HASH);
+          return null;
+        }
 
         const valid = await bcrypt.compare(credentials.password, user.passwordHash);
         if (!valid) return null;
@@ -52,4 +74,21 @@ export const authOptions: NextAuthOptions = {
     },
   },
   secret: process.env.NEXTAUTH_SECRET,
+  // Sessions expire rather than living forever; the JWT is refreshed while the
+  // user is active.
+  jwt: { maxAge: 24 * 60 * 60 },
+  cookies: {
+    sessionToken: {
+      name:
+        process.env.NODE_ENV === "production"
+          ? "__Secure-next-auth.session-token"
+          : "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
 };

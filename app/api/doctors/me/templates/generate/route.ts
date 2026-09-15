@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 /**
  * POST /api/doctors/me/templates/generate { weeks }
@@ -15,6 +16,9 @@ export async function POST(req: NextRequest) {
   if (!session?.user || (session.user as any).role !== "DOCTOR") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const limited = rateLimit("slot-generate", (session.user as any).id, RULES.write);
+  if (limited) return limited;
 
   const doctor = await prisma.doctorProfile.findUnique({
     where: { userId: (session.user as any).id },

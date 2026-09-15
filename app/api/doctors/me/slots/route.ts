@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 async function requireDoctor() {
   const session = await getServerSession(authOptions);
@@ -16,6 +17,9 @@ async function requireDoctor() {
 export async function GET() {
   const doctor = await requireDoctor();
   if (!doctor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const limited = rateLimit("doctor-slots", doctor.id, RULES.read);
+  if (limited) return limited;
 
   const slots = await prisma.slot.findMany({
     where: { doctorId: doctor.id, startTime: { gte: new Date() } },
@@ -39,6 +43,9 @@ const createSchema = z.object({
 export async function POST(req: NextRequest) {
   const doctor = await requireDoctor();
   if (!doctor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const limited = rateLimit("doctor-slots", doctor.id, RULES.write);
+  if (limited) return limited;
 
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -75,6 +82,9 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const doctor = await requireDoctor();
   if (!doctor) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const limited = rateLimit("doctor-slots", doctor.id, RULES.write);
+  if (limited) return limited;
 
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing slot id" }, { status: 400 });

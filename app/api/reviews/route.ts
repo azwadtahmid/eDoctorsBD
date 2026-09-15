@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
+
+const reviewSchema = z.object({
+  appointmentId: z.string().min(1).max(100),
+  rating: z.number().int().min(1).max(5),
+  // Publicly rendered on the doctor's profile. React escapes it on the way
+  // out; this caps the size and trims blank submissions on the way in.
+  comment: z.string().trim().max(2000).optional().nullable(),
+});
 
 /**
  * POST /api/reviews { appointmentId, rating, comment }
@@ -15,11 +25,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const { appointmentId, rating, comment } = await req.json();
+  const limited = rateLimit("review", (session.user as any).id, RULES.write);
+  if (limited) return limited;
 
-  if (!appointmentId || typeof rating !== "number" || rating < 1 || rating > 5) {
+  const parsed = reviewSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
     return NextResponse.json({ error: "Invalid input" }, { status: 400 });
   }
+  const { appointmentId, rating, comment } = parsed.data;
 
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
@@ -48,7 +61,7 @@ export async function POST(req: NextRequest) {
       patientId: appointment.patientId,
       doctorId: appointment.doctorId,
       rating,
-      comment,
+      comment: comment || null,
     },
   });
 

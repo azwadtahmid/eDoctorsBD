@@ -2,27 +2,42 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { clientIp, rateLimit, RULES } from "@/lib/rate-limit";
+
+/** Work factor for password hashing. 12 is the current sensible default. */
+const BCRYPT_ROUNDS = 12;
 
 const registerSchema = z.object({
-  name: z.string().min(2, "Name must be at least 2 characters"),
-  email: z.string().email("Enter a valid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  phone: z.string().optional(),
+  name: z.string().min(2, "Name must be at least 2 characters").max(100),
+  email: z.string().email("Enter a valid email address").max(254).toLowerCase().trim(),
+  password: z
+    .string()
+    .min(10, "Password must be at least 10 characters")
+    .max(200, "Password is too long")
+    .refine((v) => !/^[0-9]+$/.test(v), "Password cannot be all numbers"),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^[0-9+\-\s()]{6,20}$/, "Enter a valid phone number")
+    .optional(),
   role: z.enum(["PATIENT", "DOCTOR"]).default("PATIENT"),
   gender: z.enum(["MALE", "FEMALE", "OTHER"]).optional(),
   // Doctor-only
-  bmdcNumber: z.string().optional(),
-  specialization: z.string().optional(),
-  feeBdt: z.number().optional(),
-  experienceYrs: z.number().optional(),
-  hospitalId: z.string().optional(),
-  languages: z.array(z.string()).optional(),
-  latitude: z.number().optional(),
-  longitude: z.number().optional(),
+  bmdcNumber: z.string().trim().min(3).max(50).optional(),
+  specialization: z.string().trim().min(2).max(100).optional(),
+  feeBdt: z.number().int().min(0).max(100000).optional(),
+  experienceYrs: z.number().int().min(0).max(70).optional(),
+  hospitalId: z.string().max(100).optional(),
+  languages: z.array(z.string().max(50)).max(20).optional(),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
 });
 
 export async function POST(req: NextRequest) {
-  const parsed = registerSchema.safeParse(await req.json());
+  const limited = rateLimit("register", clientIp(req), RULES.register);
+  if (limited) return limited;
+
+  const parsed = registerSchema.safeParse(await req.json().catch(() => null));
 
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
@@ -53,7 +68,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const passwordHash = await bcrypt.hash(data.password, 10);
+  const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS);
 
   const user = await prisma.user.create({
     data: {

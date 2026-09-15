@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 /**
  * POST /api/appointments/:id/reschedule-response { accept: boolean }
@@ -16,6 +17,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!session?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  const limited = rateLimit("reschedule-response", (session.user as any).id, RULES.write);
+  if (limited) return limited;
 
   const appointment = await prisma.appointment.findUnique({ where: { id: params.id } });
   if (!appointment || appointment.patientId !== (session.user as any).id) {

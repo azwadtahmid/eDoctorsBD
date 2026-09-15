@@ -1,9 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { evaluateFlags, SubmittedAnswer } from "@/lib/intake-questions";
+import { rateLimit, RULES } from "@/lib/rate-limit";
+
+/**
+ * The intake answers are stored verbatim as JSON on the appointment and are
+ * read back by the doctor, so the shape and size are pinned here rather than
+ * cast through `as`. An unvalidated body would let a caller stash arbitrary
+ * nested JSON of any size in the database.
+ */
+const answerSchema = z.object({
+  questionId: z.string().max(100),
+  question: z.string().max(500),
+  answer: z.union([
+    z.string().max(2000),
+    z.array(z.string().max(500)).max(50),
+    z.number(),
+  ]),
+});
+
+const bookingSchema = z.object({
+  slotId: z.string().min(1).max(100),
+  patientProfileId: z.string().min(1).max(100).nullish(),
+  answers: z.array(answerSchema).max(100).optional(),
+});
 
 /**
  * POST /api/appointments { slotId, patientProfileId?, answers[] }
@@ -21,11 +45,18 @@ export async function POST(req: NextRequest) {
   }
 
   const userId = (session.user as any).id;
-  const { slotId, patientProfileId, answers } = await req.json();
 
-  if (!slotId) {
-    return NextResponse.json({ error: "slotId is required" }, { status: 400 });
+  const limited = rateLimit("booking", userId, RULES.booking);
+  if (limited) return limited;
+
+  const parsed = bookingSchema.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: "Invalid booking request", details: parsed.error.flatten() },
+      { status: 400 }
+    );
   }
+  const { slotId, patientProfileId, answers } = parsed.data;
 
   // If booking for a family member, make sure it belongs to this account
   if (patientProfileId) {
@@ -62,7 +93,7 @@ export async function POST(req: NextRequest) {
       });
 
       // Store the intake answers alongside the appointment
-      if (Array.isArray(answers) && answers.length > 0) {
+      if (answers && answers.length > 0) {
         const typed = answers as SubmittedAnswer[];
         const { flagged, reasons } = evaluateFlags(slot.doctor.specialization, typed);
 

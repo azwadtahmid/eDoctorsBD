@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 /** GET /api/favorites — the patient's saved doctors */
 export async function GET() {
@@ -9,6 +10,9 @@ export async function GET() {
   if (!session?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  const limited = rateLimit("favorites", (session.user as any).id, RULES.read);
+  if (limited) return limited;
 
   const favorites = await prisma.favorite.findMany({
     where: { patientId: (session.user as any).id },
@@ -38,6 +42,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
+  const limited = rateLimit("favorites", (session.user as any).id, RULES.write);
+  if (limited) return limited;
+
   const { doctorId } = await req.json();
   if (!doctorId) return NextResponse.json({ error: "doctorId required" }, { status: 400 });
 
@@ -60,6 +67,9 @@ export async function DELETE(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  const limited = rateLimit("favorites", (session.user as any).id, RULES.write);
+  if (limited) return limited;
 
   const doctorId = req.nextUrl.searchParams.get("doctorId");
   if (!doctorId) return NextResponse.json({ error: "doctorId required" }, { status: 400 });

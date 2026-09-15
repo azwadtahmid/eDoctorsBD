@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 /** GET /api/patient-profiles — self + family members on this account */
 export async function GET() {
@@ -10,6 +11,9 @@ export async function GET() {
   if (!session?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  const limited = rateLimit("patient-profiles", (session.user as any).id, RULES.read);
+  if (limited) return limited;
 
   const profiles = await prisma.patientProfile.findMany({
     where: { accountId: (session.user as any).id },
@@ -32,6 +36,9 @@ export async function POST(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  const limited = rateLimit("patient-profiles", (session.user as any).id, RULES.write);
+  if (limited) return limited;
 
   const parsed = profileSchema.safeParse(await req.json());
   if (!parsed.success) {
@@ -58,6 +65,9 @@ export async function DELETE(req: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  const limited = rateLimit("patient-profiles", (session.user as any).id, RULES.write);
+  if (limited) return limited;
 
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });

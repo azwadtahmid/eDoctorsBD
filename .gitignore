@@ -1,6 +1,37 @@
-﻿node_modules
+node_modules
 .next
+out
+build
+
+# Environment files — every variant, so a new one can never be committed by
+# accident. The checked-in example is the one deliberate exception.
 .env
-.env.local
+.env.*
+!.env.example
+
+# Secrets and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+secrets.json
+
+# Local databases and dumps
+*.sqlite
+*.sqlite3
+*.db
+*.sql.gz
+*.dump
+
+# Logs and OS cruft
 *.log
+npm-debug.log*
 .DS_Store
+Thumbs.db
+
+# Editor / tooling
+.vscode
+.idea
+.vercel
+coverage
+*.tsbuildinfo

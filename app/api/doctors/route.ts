@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { distanceKm } from "@/lib/distance";
+import { clientIp, rateLimit, RULES } from "@/lib/rate-limit";
 
 /**
  * GET /api/doctors
@@ -13,6 +14,10 @@ import { distanceKm } from "@/lib/distance";
  * Only APPROVED doctors are ever returned.
  */
 export async function GET(req: NextRequest) {
+  // Unauthenticated and query-heavy, so throttled per IP.
+  const limited = rateLimit("doctor-search", clientIp(req), RULES.read);
+  if (limited) return limited;
+
   const sp = req.nextUrl.searchParams;
 
   const specialization = sp.get("specialization") || undefined;

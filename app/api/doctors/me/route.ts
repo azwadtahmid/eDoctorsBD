@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 async function requireDoctor() {
   const session = await getServerSession(authOptions);
@@ -18,6 +19,9 @@ export async function GET() {
   if (!doctor) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const limited = rateLimit("doctor-profile", doctor.id, RULES.read);
+  if (limited) return limited;
 
   const full = await prisma.doctorProfile.findUnique({
     where: { id: doctor.id },
@@ -47,6 +51,9 @@ export async function PATCH(req: NextRequest) {
   if (!doctor) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const limited = rateLimit("doctor-profile", doctor.id, RULES.write);
+  if (limited) return limited;
 
   const parsed = updateSchema.safeParse(await req.json());
   if (!parsed.success) {

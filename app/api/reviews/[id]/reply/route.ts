@@ -29,9 +29,12 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     return NextResponse.json({ error: "You have already replied to this review" }, { status: 409 });
   }
 
-  const { body } = await req.json();
+  const { body } = await req.json().catch(() => ({}) as any);
   if (!body || typeof body !== "string" || body.trim().length < 2) {
     return NextResponse.json({ error: "Reply text is required" }, { status: 400 });
+  }
+  if (body.trim().length > 2000) {
+    return NextResponse.json({ error: "Reply is too long (max 2000 characters)" }, { status: 400 });
   }
 
   const reply = await prisma.reviewReply.create({

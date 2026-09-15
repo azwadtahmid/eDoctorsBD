@@ -1,6 +1,9 @@
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
+/** Must match the work factor used by the app when it hashes passwords. */
+const BCRYPT_ROUNDS = 12;
+
 const prisma = new PrismaClient();
 
 const HOSPITALS = [
@@ -63,16 +66,34 @@ function jitter(lat: number, lng: number) {
 async function main() {
   console.log("Seeding database...");
 
-  const passwordHash = await bcrypt.hash("password123", 10);
+  // This seed creates an ADMIN account. Running it against a production
+  // database with a hardcoded password would hand over the whole platform, so
+  // production requires the credentials to be supplied explicitly.
+  const isProduction = process.env.NODE_ENV === "production";
+  const adminEmail = process.env.SEED_ADMIN_EMAIL || "admin@example.com";
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+
+  if (isProduction && !adminPassword) {
+    throw new Error(
+      "Refusing to seed a production database with demo credentials. " +
+        "Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD, or do not run the seed here."
+    );
+  }
+
+  const DEMO_PASSWORD = "password123";
+  const passwordHash = await bcrypt.hash(DEMO_PASSWORD, BCRYPT_ROUNDS);
+  const adminHash = adminPassword
+    ? await bcrypt.hash(adminPassword, BCRYPT_ROUNDS)
+    : passwordHash;
 
   // --- Admin ---
   await prisma.user.upsert({
-    where: { email: "admin@example.com" },
+    where: { email: adminEmail },
     update: {},
     create: {
-      email: "admin@example.com",
+      email: adminEmail,
       name: "Platform Admin",
-      passwordHash,
+      passwordHash: adminHash,
       role: "ADMIN",
       patientProfiles: { create: { name: "Platform Admin", relationship: "Self", isSelf: true } },
     },
@@ -351,7 +372,11 @@ async function main() {
   console.log("Seed complete.");
   console.log("  patient@example.com / password123");
   console.log("  doctor@example.com  / password123");
-  console.log("  admin@example.com   / password123");
+  console.log(
+    adminPassword
+      ? `  ${adminEmail} / (the SEED_ADMIN_PASSWORD you supplied)`
+      : `  ${adminEmail}   / ${DEMO_PASSWORD}`
+  );
 }
 
 main()

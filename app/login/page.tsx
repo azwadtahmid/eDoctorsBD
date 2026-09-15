@@ -59,12 +59,16 @@ function LoginPageInner() {
         No account? <a href="/register" className="text-brand-600 underline">Sign up</a>
       </p>
 
-      <div className="mt-4 rounded bg-gray-50 p-3 text-xs text-gray-500">
-        <p className="font-medium">Demo accounts (all password123):</p>
-        <p>patient@example.com — patient</p>
-        <p>doctor@example.com — doctor</p>
-        
-      </div>
+      {/* Seeded demo logins. Never rendered in a production build — the
+          seed's shared password is a development convenience, not something
+          to advertise on a live sign-in page. */}
+      {process.env.NODE_ENV !== "production" && (
+        <div className="mt-4 rounded bg-gray-50 p-3 text-xs text-gray-500">
+          <p className="font-medium">Demo accounts (all password123):</p>
+          <p>patient@example.com — patient</p>
+          <p>doctor@example.com — doctor</p>
+        </div>
+      )}
     </div>
   );
 }

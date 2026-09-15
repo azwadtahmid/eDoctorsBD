@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 /**
  * POST /api/appointments/:id/cancel { reason? }
@@ -14,6 +15,9 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
   if (!session?.user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  const limited = rateLimit("appointment-cancel", (session.user as any).id, RULES.write);
+  if (limited) return limited;
 
   const userId = (session.user as any).id;
   const role = (session.user as any).role;

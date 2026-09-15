@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 const decisionSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("approve") }),
@@ -19,6 +20,9 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
   if (!session?.user || (session.user as any).role !== "ADMIN") {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
+
+  const limited = rateLimit("admin-decision", (session.user as any).id, RULES.write);
+  if (limited) return limited;
 
   const parsed = decisionSchema.safeParse(await req.json());
   if (!parsed.success) {

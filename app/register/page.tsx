@@ -89,7 +89,8 @@ export default function RegisterPage() {
           value={form.name} onChange={(e) => update("name", e.target.value)} />
         <input required type="email" placeholder="Email" className="w-full rounded border p-2 text-sm"
           value={form.email} onChange={(e) => update("email", e.target.value)} />
-        <input required type="password" placeholder="Password (at least 6 characters)"
+        <input required type="password" placeholder="Password (at least 10 characters)"
+          minLength={10}
           className="w-full rounded border p-2 text-sm"
           value={form.password} onChange={(e) => update("password", e.target.value)} />
         <input placeholder="Phone" className="w-full rounded border p-2 text-sm"

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { initSslcommerzPayment } from "@/lib/sslcommerz";
+import { rateLimit, RULES } from "@/lib/rate-limit";
 
 /**
  * Is the SSLCommerz sandbox actually configured?
@@ -37,7 +39,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const { appointmentId } = await req.json();
+  const limited = rateLimit("payment-init", (session.user as any).id, RULES.payment);
+  if (limited) return limited;
+
+  const { appointmentId } = await req.json().catch(() => ({}) as any);
+  if (typeof appointmentId !== "string" || appointmentId.length === 0) {
+    return NextResponse.json({ error: "appointmentId is required" }, { status: 400 });
+  }
 
   const appointment = await prisma.appointment.findUnique({
     where: { id: appointmentId },
@@ -57,7 +65,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const tranId = `APT-${appointment.id}-${Date.now()}`;
+  // Must be unguessable: /api/payment/ipn is a public endpoint keyed on this
+  // value, so a predictable tran_id would let anyone address someone else's
+  // payment. (The old form appended Date.now(), which is brute-forceable.)
+  const tranId = `APT-${appointment.id}-${randomBytes(12).toString("hex")}`;
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   // ---- Payment bypass ----
